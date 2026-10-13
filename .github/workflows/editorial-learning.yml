@@ -3,7 +3,8 @@ on:
   pull_request:
     paths:
       - "social_core/**"
-      - "tests/test_editorial_learning.py"
+      - "tests/**"
+      - "contracts/SOCIAL_AV_EXCHANGE_v1.md"
       - ".github/workflows/editorial-learning.yml"
   push:
     branches: [main]
@@ -16,4 +17,4 @@ jobs:
         with:
           python-version: "3.12"
       - name: Run editorial contract regressions
-        run: python -m unittest discover -s tests -p 'test_editorial_learning.py' -v
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
