@@ -22,3 +22,9 @@ The adapter may consume structured JSON from upstream systems but must never tre
 ## Promotion gates
 `CANDIDATE → CODE_TESTED → INTEGRATION_TESTED → RUNTIME_VALIDATED → CANONICAL`.
 Do not label as runtime validated without real AV round-trip, source audit and publication preview tests.
+
+## Hardening v1.1 (2026-10-13)
+- Final-candidate publication gate now accepts `expected_brief_sha256` from the trusted originating handoff. Absent or mismatched hash is BLOCKED.
+- Each `verified` claim requires `verification_record` with `reviewer`, `evidence_id`, and `reviewed_at`. This is auditable traceability, **not** independent truth verification.
+- Never derive the expected hash from the untrusted AV return package itself.
+- QA statuses remain declarations pending validation from upstream auditable services; production integration has not been established.
