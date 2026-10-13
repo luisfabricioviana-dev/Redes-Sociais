@@ -5,7 +5,7 @@ def good(channel="curiosos_conhecimentos"):
     return {"channel": channel, "hook": "Por que isso acontece?", "editorial_promise": "Explicação verificável",
             "script": "Uma descoberta explicada com contexto.", "claims": [
                 {"id": "c1", "statement": "Afirmação de teste", "sources": [{"url": "https://example.org/study", "title": "Estudo"}],
-                 "verification": "verified", "visual_proof": "mapped"}],
+                 "verification": "verified", "verification_record": {"reviewer": "fixture-reviewer", "evidence_id": "fixture:e1", "reviewed_at": "2026-10-13"}, "visual_proof": "mapped"}],
             "source_rights": "cleared", "retention_hypothesis": "Hook contextual reduz abandono."}
 
 class EditorialCoreTests(unittest.TestCase):
@@ -47,7 +47,26 @@ class EditorialCoreTests(unittest.TestCase):
            **{k:"PASS" for k in ("semantic_alignment","factual_integrity","provenance","platform_preview","audiovisual_qa")}}
         self.assertFalse(validate_final_package(p)["publication_ready"])
         p["approval"]="approved"
-        self.assertTrue(validate_final_package(p)["publication_ready"])
+        self.assertFalse(validate_final_package(p)["publication_ready"])
+        h=build_handoff(good())
+        p["editorial_brief_sha256"]=h["sha256"]
+        self.assertTrue(validate_final_package(p,h["sha256"])["publication_ready"])
+        self.assertFalse(validate_final_package(p,"0"*64)["publication_ready"])
+    def test_verification_trace(self):
+        c=good(); del c["claims"][0]["verification_record"]
+        result=evaluate_candidate(c)
+        self.assertEqual(result["status"],"BLOCKED")
+        self.assertTrue(any(i["code"].startswith("MISSING_VERIFICATION_RECORD") for i in result["issues"]))
+    def test_final_sha_identity_required(self):
+        h=build_handoff(good())
+        package={"contract":"AUDIOVISUAL_FINAL_CANDIDATE_PACKAGE_v1",
+                 "editorial_brief_sha256":h["sha256"],"render_id":"render-1",
+                 **{k:"PASS" for k in ("semantic_alignment","factual_integrity","provenance","platform_preview","audiovisual_qa")},
+                 "approval":"approved"}
+        self.assertFalse(validate_final_package(package)["publication_ready"])
+        self.assertTrue(validate_final_package(package,h["sha256"])["publication_ready"])
+        package["editorial_brief_sha256"]="0"*64
+        self.assertFalse(validate_final_package(package,h["sha256"])["publication_ready"])
     def test_learning_candidate(self):
         l=record_learning({"source_id":"tutorial1","observation":"retenção","hypothesis":"gancho melhora","owner":"social","channel":"curiosos_conhecimentos"})
         self.assertEqual(l["status"],"CANDIDATE")
