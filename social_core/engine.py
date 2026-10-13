@@ -55,6 +55,11 @@ def evaluate_candidate(candidate: dict) -> dict:
         sources = claim.get("sources")
         if not isinstance(sources, list) or not any(isinstance(s, dict) and _text(s.get("url")) and _text(s.get("title")) for s in sources):
             issues.append(("BLOCKED", f"UNSOURCED_CLAIM:{cid or idx}"))
+        # Verification labels are assertions. Require an identifiable, separately
+        # traceable review record; this does NOT independently prove source truth.
+        review = claim.get("verification_record")
+        if not isinstance(review, dict) or not all(_text(review.get(k)) for k in ("reviewer", "evidence_id", "reviewed_at")):
+            issues.append(("BLOCKED", f"MISSING_VERIFICATION_RECORD:{cid or idx}"))
         if claim.get("verification") != "verified":
             issues.append(("BLOCKED", f"UNVERIFIED_CLAIM:{cid or idx}"))
         if claim.get("visual_proof") != "mapped":
@@ -85,11 +90,15 @@ def build_handoff(candidate: dict) -> dict:
             "audiovisual_instructions": {"no_unsourced_visual_assertions": True,
                                         "claim_visual_binding_required": True}}
 
-def validate_final_package(package: dict) -> dict:
+def validate_final_package(package: dict, expected_brief_sha256: str | None = None) -> dict:
     """Fail closed on render review: Social approves publication; AV reports observed QA."""
     if not isinstance(package, dict) or package.get("contract") != "AUDIOVISUAL_FINAL_CANDIDATE_PACKAGE_v1":
         raise LearningError("invalid audiovisual return contract")
     issues = []
+    if not _text(expected_brief_sha256) or len(expected_brief_sha256) != 64 or any(c not in "0123456789abcdef" for c in expected_brief_sha256):
+        issues.append(("BLOCKED", "MISSING_TRUSTED_BRIEF_IDENTITY"))
+    elif package.get("editorial_brief_sha256") != expected_brief_sha256:
+        issues.append(("BLOCKED", "EDITORIAL_BRIEF_IDENTITY_MISMATCH"))
     for field in ("editorial_brief_sha256", "render_id", "semantic_alignment", "factual_integrity",
                   "provenance", "platform_preview", "audiovisual_qa"):
         if not _text(package.get(field)):
