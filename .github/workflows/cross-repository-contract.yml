@@ -22,5 +22,5 @@ jobs:
       - name: Declare cross-repo verification scope
         run: |
           echo "LOCAL_SOCIAL_CONTRACT=TESTED"
-          echo "CROSS_REPO_CONTRACT=TESTED_IN_PRIVATE_AUDIOVISUAL_PR_479"
+          echo "CROSS_REPO_CONTRACT=NOT_EVALUATED_HERE; refer to private audiovisual PR #479 CI"
           echo "Do not infer E2E, publication rights or real media validation from this run."
