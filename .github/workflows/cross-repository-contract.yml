@@ -1,0 +1,26 @@
+name: Social exchange local smoke (private cross-repo test in AV)
+on:
+  pull_request:
+    paths:
+      - "social_core/**"
+      - "tests/**"
+      - "integration_tests/**"
+      - ".github/workflows/cross-repository-contract.yml"
+  workflow_dispatch:
+jobs:
+  local-contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Execute local Social contracts only
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Declare cross-repo verification scope
+        run: |
+          echo "LOCAL_SOCIAL_CONTRACT=TESTED"
+          echo "CROSS_REPO_CONTRACT=NOT_EVALUATED_HERE; refer to private audiovisual PR #479 CI"
+          echo "Do not infer E2E, publication rights or real media validation from this run."
