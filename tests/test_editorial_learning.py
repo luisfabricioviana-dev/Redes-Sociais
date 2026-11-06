@@ -75,6 +75,16 @@ class EditorialCoreTests(unittest.TestCase):
     def test_no_auto_promotion(self):
         with self.assertRaises(LearningError):
             record_learning({"source_id":"x","observation":"x","hypothesis":"x","owner":"social","channel":"curiosos_conhecimentos","status":"CANONICAL"})
+    def test_satire_channel_requires_explicit_disclosure(self):
+        c=good("protocolo_viral")
+        self.assertEqual(evaluate_candidate(c)["status"],"REPAIR_REQUIRED")
+        c["satire_disclosure"]="Sátira ficcional baseada em premissa factual verificada"
+        self.assertEqual(evaluate_candidate(c)["status"],"PASS")
+        self.assertEqual(build_handoff(c)["payload"]["satire_disclosure"],c["satire_disclosure"])
+    def test_scientific_channel_rejects_satire_disclosure(self):
+        c=good("curiosos_conhecimentos")
+        c["satire_disclosure"]="sátira"
+        self.assertEqual(evaluate_candidate(c)["status"],"BLOCKED")
     def test_unknown_channel(self):
         with self.assertRaises(LearningError): evaluate_candidate(good("other"))
 
