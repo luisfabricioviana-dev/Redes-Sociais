@@ -108,7 +108,8 @@ def validate_final_package(package: dict, expected_brief_sha256: str | None = No
             issues.append(("BLOCKED", f"NONPASS_{field.upper()}"))
     if package.get("approval") != "approved":
         issues.append(("BLOCKED", "FINAL_APPROVAL_REQUIRED"))
-    return {"status": _status(issues), "publication_ready": not issues,
+    return {"status": _status(issues), "contract_compatible": not issues, "publication_ready": False,
+            "release_authority": "EXTERNAL_INDEPENDENT_GATE_REQUIRED",
             "issues": [{"severity": s, "code": c} for s,c in issues]}
 
 def record_learning(case: dict) -> dict:
