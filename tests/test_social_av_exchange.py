@@ -14,7 +14,8 @@ def returned(ex):
 class IntegrationContracts(unittest.TestCase):
     def test_round_trip_fixture(self):
         ex = create_exchange(good())
-        self.assertTrue(receive_av_result(ex, returned(ex))["publication_ready"])
+        self.assertTrue(receive_av_result(ex, returned(ex))["contract_compatible"])
+        self.assertFalse(receive_av_result(ex, returned(ex))["publication_ready"])
     def test_tampered_origin(self):
         ex = create_exchange(good())
         out = returned(ex)
