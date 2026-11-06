@@ -1,24 +1,25 @@
-# Social ↔ Audiovisual: operational admission and blocked release
+# Social ↔ Audiovisual operational admission ledger (2026-11-06)
 
-Status: **CANDIDATE / NO PRODUCTION PUBLICATION**.
+Status: **CANDIDATE / NO PUBLICATION**.
 
-## Important safety separation
+## CI architecture — private-origin cross-repository test
 
-The Social editorial engine checks candidate **contract compatibility**; it does not independently verify QA evidence identifiers, factual claims, licenses, or reviewer identity. Neither a `PASS` in a fixture nor `approval=approved` proves release authorization. `publication_ready` is **always false** in this candidate. Successful structural validation is reported under `contract_compatible`. All real publishing requires a separately implemented and independently validated release authority.
+The old public Social → private AV checkout failed: a standard GITHUB_TOKEN of one repository does not grant access to another private repository. No token should be placed in code or public workflows.
 
-## Private cross-repository CI failure: access, not interoperability
+**Resolved in the opposite direction:** private `agente-youtube` PR #479 has workflow `.github/workflows/pv86-social-av-cross-repo.yml`, checking out public `Redes-Sociais` branch `feature/editorial-learning-core-v1`, and runs both repositories' actual Python contracts. Run 42299527464 = SUCCESS for SHA `6b0d0379ff9db1d2ae0a57e4688b6ed12e703c41`. This is **contract interoperability** only, not video rendering or editorial authorization.
 
-The workflow `cross-repository-contract.yml` previously returned `Repository not found` when checking out `luisfabricioviana-dev/agente-youtube` from the `Redes-Sociais` repository. The default GITHUB_TOKEN is scoped to one repository, even for the same owner.
+The Social branch's local CI does not access private repositories, has no `AV_REPO_READ_TOKEN` requirement, and must not claim to test cross-repo interop on its own. An AV branch ref should be pinned to commit SHA for promotion, and future Social changes require a new cross-repo check.
 
-Configure a **fine-grained, read-only** GitHub token with access only to private `agente-youtube` (Contents: Read), then store it as the *Actions repository secret* `AV_REPO_READ_TOKEN` in **Redes-Sociais**. Never commit, print, paste, or include this token in reports. Rerun the specific workflow and verify that the checkout + cross-repository tests actually run. Missing token produces an explicit CI failure, not a green skip.
+## Release boundary hardening
 
-## Separate blockers
+Social candidate `contract_compatible` measures schema/identity consistency only. `publication_ready=false` regardless of fixture `approval=approved`, because self-reported PASS and evidence string IDs do not authenticate human/technical observation.
 
-1. This PR #1 remains draft until its full tests and independent code review.
-2. The corresponding AV branch `feature/social-av-exchange-v1` is a **planning contract**, not a rendering pipeline.
-3. PR #479 in `agente-youtube` has a candidate PV86 import and ffprobe witness; 29 actual audio excerpts verified separately, but **no user source/edit pair of MP4 has been tested**.
-4. AVIA PR #474 is still a standalone candidate, not automatically imported by this workflow.
-5. PV86 reviewer independence is not certified; `low_025` is still UNCERTAIN, and other lexical revisions differ.
-6. No causal retention gains or real platform engagement metrics are established.
+## Outstanding pre-merge requirements
 
-Required for final promotion: true decoded user media, source/edit word-level fidelity checks, explicit source ownership/rights, independent editorial release sign-off, scoped channel identity, cross-repo CI, review and authorized merge.
+1. Cross-repo tests with **actual user original and edited MP4 pair** remain absent. PR #479 includes FFprobe identity and synthetic MP4 regression, not speech preservation.
+2. PV86 29 clips are integrity-checked, 29 + 8 user decisions linked, but one task `low_025` is UNCERTAIN and corrections conflict. No independent certification.
+3. AVIA #474 is draft, tested with technical real media in isolation; no full PT-BR semantics parity or merged interface.
+4. Private PR #479 and Social PR #1 require human review, full suite and authorized merge.
+5. Platform telemetry and causal impact estimates are not independently measured.
+
+Operational gates: `HUMAN_REVIEW_CERTIFIED=false`, `SPEECH_PRESERVATION=NOT_VERIFIED`, `PUBLICATION=BLOCKED`.
