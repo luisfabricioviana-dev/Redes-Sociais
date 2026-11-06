@@ -50,7 +50,8 @@ class EditorialCoreTests(unittest.TestCase):
         self.assertFalse(validate_final_package(p)["publication_ready"])
         h=build_handoff(good())
         p["editorial_brief_sha256"]=h["sha256"]
-        self.assertTrue(validate_final_package(p,h["sha256"])["publication_ready"])
+        self.assertTrue(validate_final_package(p,h["sha256"])["contract_compatible"])
+        self.assertFalse(validate_final_package(p,h["sha256"])["publication_ready"])
         self.assertFalse(validate_final_package(p,"0"*64)["publication_ready"])
     def test_verification_trace(self):
         c=good(); del c["claims"][0]["verification_record"]
@@ -64,7 +65,8 @@ class EditorialCoreTests(unittest.TestCase):
                  **{k:"PASS" for k in ("semantic_alignment","factual_integrity","provenance","platform_preview","audiovisual_qa")},
                  "approval":"approved"}
         self.assertFalse(validate_final_package(package)["publication_ready"])
-        self.assertTrue(validate_final_package(package,h["sha256"])["publication_ready"])
+        self.assertTrue(validate_final_package(package,h["sha256"])["contract_compatible"])
+        self.assertFalse(validate_final_package(package,h["sha256"])["publication_ready"])
         package["editorial_brief_sha256"]="0"*64
         self.assertFalse(validate_final_package(package,h["sha256"])["publication_ready"])
     def test_learning_candidate(self):
