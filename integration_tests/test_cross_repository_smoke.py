@@ -22,6 +22,19 @@ class CrossRepositorySmoke(unittest.TestCase):
         package["approval"]="approved"
         self.assertTrue(receive_av_result(original,package)["contract_compatible"])
         self.assertFalse(receive_av_result(original,package)["publication_ready"])
+    def test_satire_round_trip_stays_candidate(self):
+        c=good("protocolo_viral")
+        c["satire_disclosure"]="Sátira ficcional com fatos-base documentados"
+        original=create_exchange(c)
+        accepted=accept_social_brief(original)
+        self.assertEqual(accepted["channel"],"protocolo_viral")
+        self.assertFalse(accepted["runtime_authorized"])
+        package=build_final_candidate(accepted,"test-satire",
+            {k:"PASS" for k in FIELDS},{k:"fixture:"+k for k in FIELDS})
+        package["approval"]="approved"
+        decision=receive_av_result(original,package)
+        self.assertTrue(decision["contract_compatible"])
+        self.assertFalse(decision["publication_ready"])
     def test_changed_source_blocked_by_av(self):
         original=create_exchange(good())
         original["brief"]["payload"]["script"]+=" altered"
