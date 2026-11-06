@@ -46,7 +46,8 @@ def receive_av_result(exchange: dict, av_package: dict) -> dict:
         for key in needed:
             if not isinstance(evidence.get(key), str) or not evidence[key].strip():
                 issues.append("MISSING_AV_QA_EVIDENCE:" + key)
-    return {"status": "BLOCKED" if issues else "PASS", "publication_ready": not issues,
+    return {"status": "BLOCKED" if issues else "PASS", "contract_compatible": not issues,
+            "publication_ready": False, "release_authority": "EXTERNAL_INDEPENDENT_GATE_REQUIRED",
             "issues": sorted(set(issues)), "brief_sha256": expected}
 
 def ingest_tutorial(observation: dict) -> dict:
