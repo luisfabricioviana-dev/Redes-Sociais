@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 import json
 
-CHANNELS = frozenset({"fronteiras_do_mundo_360", "curiosos_conhecimentos", "natureza_em_360"})
+CHANNELS = frozenset({"fronteiras_do_mundo_360", "curiosos_conhecimentos", "natureza_em_360", "protocolo_viral"})
 STATUSES = ("BLOCKED", "REPAIR_REQUIRED", "PASS_WITH_NOTES", "PASS")
 SEVERITY = {"PASS": 0, "PASS_WITH_NOTES": 1, "REPAIR_REQUIRED": 2, "BLOCKED": 3}
 
@@ -70,6 +70,10 @@ def evaluate_candidate(candidate: dict) -> dict:
             issues.append(("BLOCKED", f"UNPROVEN_BEHAVIOR_FOOTAGE:{cid or idx}"))
     if candidate.get("source_rights") != "cleared":
         issues.append(("BLOCKED", "SOURCE_RIGHTS_UNCLEAR"))
+    if channel == "protocolo_viral" and not _text(candidate.get("satire_disclosure")):
+        issues.append(("REPAIR_REQUIRED", "MISSING_SATIRE_DISCLOSURE"))
+    if channel != "protocolo_viral" and candidate.get("satire_disclosure"):
+        issues.append(("BLOCKED", "SATIRE_DISCLOSURE_CROSS_PROFILE"))
     if candidate.get("cross_channel_style") is True:
         issues.append(("BLOCKED", "CHANNEL_STYLE_CONTAMINATION"))
     if candidate.get("retention_hypothesis") is None:
@@ -83,7 +87,7 @@ def build_handoff(candidate: dict) -> dict:
     if not result["can_handoff"]:
         raise LearningError("editorial gate blocks audiovisual handoff")
     approved = {k: deepcopy(candidate.get(k)) for k in
-                ("channel", "hook", "editorial_promise", "script", "claims", "retention_hypothesis")}
+                ("channel", "hook", "editorial_promise", "script", "claims", "retention_hypothesis", "satire_disclosure")}
     payload = json.dumps(approved, sort_keys=True, ensure_ascii=False).encode("utf-8")
     return {"contract": "SOCIAL_MEDIA_BRIEF_v1", "gate": result["status"],
             "sha256": sha256(payload).hexdigest(), "payload": approved,
