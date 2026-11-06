@@ -13,10 +13,19 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - name: Assert private AV repository access is configured
+        env:
+          AV_REPO_READ_TOKEN: ${{ secrets.AV_REPO_READ_TOKEN }}
+        run: |
+          if [ -z "$AV_REPO_READ_TOKEN" ]; then
+            echo "::error::AV_REPO_READ_TOKEN missing: configure a fine-grained read-only token for private agente-youtube in Redes-Sociais Actions secrets. Cross-repository CI is NOT VERIFIED."
+            exit 1
+          fi
       - name: Checkout AV counterpart candidate
         uses: actions/checkout@v4
         with:
           repository: luisfabricioviana-dev/agente-youtube
+          token: ${{ secrets.AV_REPO_READ_TOKEN }}
           ref: feature/social-av-exchange-v1
           path: _audiovisual
           persist-credentials: false
