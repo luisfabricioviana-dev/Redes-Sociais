@@ -20,7 +20,8 @@ class CrossRepositorySmoke(unittest.TestCase):
         self.assertFalse(receive_av_result(original,package)["publication_ready"])
         # Independent editorial approval decision; only exercised in a fixture.
         package["approval"]="approved"
-        self.assertTrue(receive_av_result(original,package)["publication_ready"])
+        self.assertTrue(receive_av_result(original,package)["contract_compatible"])
+        self.assertFalse(receive_av_result(original,package)["publication_ready"])
     def test_changed_source_blocked_by_av(self):
         original=create_exchange(good())
         original["brief"]["payload"]["script"]+=" altered"
