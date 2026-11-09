@@ -1,0 +1,25 @@
+name: Social shared REA visual bridge
+on:
+  push:
+    branches: [feature/social-rea-visual-bridge-20261108]
+    paths:
+      - 'adapters/rea_visual_service_v1.py'
+      - 'tests/test_rea_visual_service_adapter.py'
+      - '.github/workflows/rea-visual-service-bridge.yml'
+  pull_request:
+    paths:
+      - 'adapters/rea_visual_service_v1.py'
+      - 'tests/test_rea_visual_service_adapter.py'
+      - '.github/workflows/rea-visual-service-bridge.yml'
+  workflow_dispatch:
+jobs:
+  adapter-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile adapters/rea_visual_service_v1.py tests/test_rea_visual_service_adapter.py
+      - run: python -m unittest discover -s tests -p 'test_rea_visual_service_adapter.py' -v
