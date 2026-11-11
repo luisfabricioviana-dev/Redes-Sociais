@@ -4,9 +4,11 @@ on:
     paths:
       - "contracts/rea_editorial_bridge.py"
       - "contracts/rea_independent_review.py"
+      - "contracts/rea_review_artifacts.py"
       - "contracts/rea_learning_gate.py"
       - "tests/test_rea_editorial_bridge.py"
       - "tests/test_rea_independent_review.py"
+      - "tests/test_rea_review_artifacts.py"
       - ".github/workflows/rea-editorial-bridge.yml"
   push:
     branches: [main]
