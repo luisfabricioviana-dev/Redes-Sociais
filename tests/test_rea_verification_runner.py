@@ -177,4 +177,36 @@ class OfflineVerificationTests(unittest.TestCase):
             self.assertEqual(report["status"], "UNVERIFIED")
             self.assertIn("README.md", report["commit_content_mismatches"])
 
+    def test_hidden_external_symlink_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, target)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            rel = REQUIRED[0]
+            subprocess.run(["git", "update-index", "--assume-unchanged", rel],
+                           cwd=root, check=True)
+            original = root / rel
+            outside = Path(d) / "external-equal-content.py"
+            outside.write_bytes(original.read_bytes())
+            original.unlink()
+            try:
+                original.symlink_to(outside)
+            except (OSError, NotImplementedError):
+                self.skipTest("Symlink creation requires OS privilege")
+            status = subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                                    check=True, capture_output=True, text=True)
+            self.assertEqual(status.stdout.strip(), "")
+            result = audit(root, Path(d) / "symlink-receipt.json")
+            self.assertEqual(result["status"], "UNVERIFIED")
+            self.assertIn(rel, result["commit_content_mismatches"])
+            self.assertFalse(result["publication_authorized"])
+
 if __name__=="__main__": unittest.main()
