@@ -72,4 +72,29 @@ class OfflineVerificationTests(unittest.TestCase):
             self.assertEqual(result["status"],"UNVERIFIED")
             self.assertIn(rel,result["commit_content_mismatches"])
 
+    def test_running_tests_that_mutate_checkout_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"repo";root.mkdir()
+            origin=Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                dst=root/rel;dst.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(origin/rel,dst)
+            mutator=root/"tests/test_rea_mutates_checkout.py"
+            mutator.write_text(
+                "import unittest\\n"
+                "from pathlib import Path\\n"
+                "class MutatesCheckout(unittest.TestCase):\\n"
+                "    def test_mutate(self):\\n"
+                "        Path('contracts/rea_learning_gate.py').write_text('# changed by test\\\\n')\\n",
+                encoding="utf-8")
+            subprocess.run(["git","init","-q"],cwd=root,check=True)
+            subprocess.run(["git","add","."],cwd=root,check=True)
+            subprocess.run(["git","-c","user.name=Fixture",
+                            "-c","user.email=fixture@example.invalid",
+                            "commit","-qm","fixture"],cwd=root,check=True)
+            result=audit(root,Path(d)/"mutated-receipt.json")
+            self.assertEqual(result["test_exit_code"],0)
+            self.assertEqual(result["status"],"UNVERIFIED")
+            self.assertFalse(result["git_clean_after_tests"])
+
 if __name__=="__main__": unittest.main()
