@@ -1,0 +1,22 @@
+name: REA editorial learning bridge
+on:
+  pull_request:
+    paths:
+      - "contracts/rea_editorial_bridge.py"
+      - "contracts/rea_learning_gate.py"
+      - "tests/test_rea_editorial_bridge.py"
+      - ".github/workflows/rea-editorial-bridge.yml"
+  push:
+    branches: [main]
+jobs:
+  contract-regression:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run REA and Social admission regressions
+        run: python -m unittest discover -s tests -p 'test_rea_*py' -v
