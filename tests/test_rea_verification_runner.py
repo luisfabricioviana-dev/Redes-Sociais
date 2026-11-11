@@ -64,7 +64,7 @@ class OfflineVerificationTests(unittest.TestCase):
             rel=REQUIRED[0]
             subprocess.run(["git","update-index","--assume-unchanged",rel],
                            cwd=root,check=True)
-            (root/rel).write_text("# altered after commit\\n",encoding="utf-8")
+            (root/rel).write_text("# altered after commit\n",encoding="utf-8")
             status=subprocess.run(["git","status","--porcelain"],cwd=root,
                                   check=True,capture_output=True,text=True)
             self.assertEqual(status.stdout.strip(),"")
@@ -81,11 +81,11 @@ class OfflineVerificationTests(unittest.TestCase):
                 shutil.copyfile(origin/rel,dst)
             mutator=root/"tests/test_rea_mutates_checkout.py"
             mutator.write_text(
-                "import unittest\\n"
-                "from pathlib import Path\\n"
-                "class MutatesCheckout(unittest.TestCase):\\n"
-                "    def test_mutate(self):\\n"
-                "        Path('contracts/rea_learning_gate.py').write_text('# changed by test\\\\n')\\n",
+                "import unittest\n"
+                "from pathlib import Path\n"
+                "class MutatesCheckout(unittest.TestCase):\n"
+                "    def test_mutate(self):\n"
+                "        Path('contracts/rea_learning_gate.py').write_text('# changed by test\\\n')\n",
                 encoding="utf-8")
             subprocess.run(["git","init","-q"],cwd=root,check=True)
             subprocess.run(["git","add","."],cwd=root,check=True)
@@ -106,12 +106,12 @@ class OfflineVerificationTests(unittest.TestCase):
                 shutil.copyfile(origin/rel,dst)
             mutator=root/"tests/test_rea_hidden_mutation.py"
             mutator.write_text(
-                "import unittest,subprocess\\n"
-                "from pathlib import Path\\n"
-                "class HiddenMutator(unittest.TestCase):\\n"
-                "    def test_mutate(self):\\n"
-                "        subprocess.run(['git','update-index','--assume-unchanged','contracts/rea_learning_gate.py'],check=True)\\n"
-                "        Path('contracts/rea_learning_gate.py').write_text('# concealed edit\\\\n')\\n",
+                "import unittest,subprocess\n"
+                "from pathlib import Path\n"
+                "class HiddenMutator(unittest.TestCase):\n"
+                "    def test_mutate(self):\n"
+                "        subprocess.run(['git','update-index','--assume-unchanged','contracts/rea_learning_gate.py'],check=True)\n"
+                "        Path('contracts/rea_learning_gate.py').write_text('# concealed edit\\\n')\n",
                 encoding="utf-8")
             subprocess.run(["git","init","-q"],cwd=root,check=True)
             subprocess.run(["git","add","."],cwd=root,check=True)
