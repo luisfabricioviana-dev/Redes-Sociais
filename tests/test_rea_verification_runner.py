@@ -97,4 +97,31 @@ class OfflineVerificationTests(unittest.TestCase):
             self.assertEqual(result["status"],"UNVERIFIED")
             self.assertFalse(result["git_clean_after_tests"])
 
+    def test_running_tests_with_hidden_mutation_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"repo";root.mkdir()
+            origin=Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                dst=root/rel;dst.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(origin/rel,dst)
+            mutator=root/"tests/test_rea_hidden_mutation.py"
+            mutator.write_text(
+                "import unittest,subprocess\\n"
+                "from pathlib import Path\\n"
+                "class HiddenMutator(unittest.TestCase):\\n"
+                "    def test_mutate(self):\\n"
+                "        subprocess.run(['git','update-index','--assume-unchanged','contracts/rea_learning_gate.py'],check=True)\\n"
+                "        Path('contracts/rea_learning_gate.py').write_text('# concealed edit\\\\n')\\n",
+                encoding="utf-8")
+            subprocess.run(["git","init","-q"],cwd=root,check=True)
+            subprocess.run(["git","add","."],cwd=root,check=True)
+            subprocess.run(["git","-c","user.name=Fixture",
+                            "-c","user.email=fixture@example.invalid",
+                            "commit","-qm","fixture"],cwd=root,check=True)
+            result=audit(root,Path(d)/"hidden-mutation-receipt.json")
+            self.assertEqual(result["test_exit_code"],0)
+            self.assertTrue(result["git_clean_after_tests"])
+            self.assertEqual(result["status"],"UNVERIFIED")
+            self.assertIn(REQUIRED[0],result["commit_content_mismatches"])
+
 if __name__=="__main__": unittest.main()
