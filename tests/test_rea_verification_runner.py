@@ -207,6 +207,7 @@ class OfflineVerificationTests(unittest.TestCase):
             result = audit(root, Path(d) / "symlink-receipt.json")
             self.assertEqual(result["status"], "UNVERIFIED")
             self.assertIn(rel, result["commit_content_mismatches"])
+            self.assertNotIn(rel, result["input_sha256"])
             self.assertFalse(result["publication_authorized"])
 
 if __name__=="__main__": unittest.main()
