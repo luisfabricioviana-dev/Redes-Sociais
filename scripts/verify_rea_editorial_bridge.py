@@ -43,7 +43,8 @@ def audit(root: Path, out: Path) -> dict:
     missing = []
     for rel in REQUIRED:
         target = root / rel
-        if not target.is_file():
+        # Do not read external files through concealed symlinks even for hashing.
+        if _has_symlink_component(root, rel) or not target.is_file():
             missing.append(rel)
         else:
             files[rel] = hashlib.sha256(target.read_bytes()).hexdigest()
