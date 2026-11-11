@@ -49,4 +49,27 @@ class OfflineVerificationTests(unittest.TestCase):
             result=audit(root,Path(d)/"dirty-receipt.json")
             self.assertEqual(result["status"],"UNVERIFIED")
 
+    def test_assume_unchanged_required_file_tampering_is_blocked(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"repo";root.mkdir()
+            origin=Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                dst=root/rel;dst.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(origin/rel,dst)
+            subprocess.run(["git","init","-q"],cwd=root,check=True)
+            subprocess.run(["git","add","."],cwd=root,check=True)
+            subprocess.run(["git","-c","user.name=Fixture",
+                            "-c","user.email=fixture@example.invalid",
+                            "commit","-qm","fixture"],cwd=root,check=True)
+            rel=REQUIRED[0]
+            subprocess.run(["git","update-index","--assume-unchanged",rel],
+                           cwd=root,check=True)
+            (root/rel).write_text("# altered after commit\\n",encoding="utf-8")
+            status=subprocess.run(["git","status","--porcelain"],cwd=root,
+                                  check=True,capture_output=True,text=True)
+            self.assertEqual(status.stdout.strip(),"")
+            result=audit(root,Path(d)/"tampered-receipt.json")
+            self.assertEqual(result["status"],"UNVERIFIED")
+            self.assertIn(rel,result["commit_content_mismatches"])
+
 if __name__=="__main__": unittest.main()
