@@ -70,8 +70,14 @@ def audit(root: Path, out: Path) -> dict:
             if (expected.returncode != 0 or actual.returncode != 0
                     or expected.stdout.strip() != actual.stdout.strip()):
                 commit_content_mismatches.append(rel)
-    run = None if missing else _run(
-        [sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests", "-p", "test_rea_*py", "-v"], root)
+    # Never execute test code from a checkout that has already failed preflight.
+    # A post-run UNVERIFIED receipt cannot undo execution of modified code.
+    preflight_ok = bool(head and len(head) == 40 and clean and not missing
+                        and tracked_result.returncode == 0 and bool(tracked)
+                        and not commit_content_mismatches)
+    run = (_run([sys.executable, "-B", "-m", "unittest", "discover", "-s",
+                 "tests", "-p", "test_rea_*py", "-v"], root)
+           if preflight_ok else None)
     # Validate again after tests. A passing suite is not sufficient if
     # executing it mutates the exact input tree being certified.
     post_status = _run(["git", "status", "--porcelain", "--untracked-files=normal"], root)
@@ -105,6 +111,8 @@ def audit(root: Path, out: Path) -> dict:
         "python": sys.version.split()[0],
         "test_command": "python -B -m unittest discover -s tests -p 'test_rea_*py' -v",
         "test_exit_code": run.returncode if run is not None else None,
+        "tests_executed": run is not None,
+        "test_skip_reason": None if preflight_ok else "PREFLIGHT_INTEGRITY_FAILED",
         "test_stdout": (run.stdout if run else "")[-12000:],
         "test_stderr": (run.stderr if run else "")[-12000:],
         "status": "LOCAL_COMMIT_TESTED" if verified else "UNVERIFIED",
