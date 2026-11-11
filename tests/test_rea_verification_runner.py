@@ -210,4 +210,31 @@ class OfflineVerificationTests(unittest.TestCase):
             self.assertNotIn(rel, result["input_sha256"])
             self.assertFalse(result["publication_authorized"])
 
+    def test_tampered_checkout_never_executes_untrusted_tests(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, target)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            sentinel = Path(d) / "executed.txt"
+            (root / "tests/test_rea_editorial_bridge.py").write_text(
+                "import unittest\n"
+                "from pathlib import Path\n"
+                "class UntrustedTest(unittest.TestCase):\n"
+                "    def test_run(self): Path(" + repr(str(sentinel)) + ").write_text('executed')\n",
+                encoding="utf-8")
+            report = audit(root, Path(d) / "preflight-receipt.json")
+            self.assertEqual(report["status"], "UNVERIFIED")
+            self.assertFalse(sentinel.exists())
+            self.assertIsNone(report["test_exit_code"])
+            self.assertFalse(report["tests_executed"])
+            self.assertEqual(report["test_skip_reason"], "PREFLIGHT_INTEGRITY_FAILED")
+
 if __name__=="__main__": unittest.main()
