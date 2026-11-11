@@ -268,4 +268,37 @@ class OfflineVerificationTests(unittest.TestCase):
             self.assertEqual(report["test_skip_reason"], "PREFLIGHT_INTEGRITY_FAILED")
             self.assertIn(name, report["untracked_discovered_tests"])
 
+    def test_ignored_package_initializer_never_executes(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                dest = root / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, dest)
+            original = root / "tests/test_rea_editorial_bridge.py"
+            original.write_text(
+                "import unittest\nimport contracts.rea_learning_gate\n"
+                "class ContractTest(unittest.TestCase):\n"
+                "    def test_ok(self): pass\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            (root / ".git/info/exclude").write_text("contracts/__init__.py\n")
+            marker = Path(d) / "ignored-code-executed.txt"
+            (root / "contracts/__init__.py").write_text(
+                "from pathlib import Path\n"
+                "Path(" + repr(str(marker)) + ").write_text('executed')\n",
+                encoding="utf-8")
+            status = subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                                    check=True, capture_output=True, text=True)
+            self.assertEqual(status.stdout.strip(), "")
+            report = audit(root, Path(d) / "ignored-import-receipt.json")
+            self.assertFalse(marker.exists(), "Ignored module must not be imported")
+            self.assertEqual(report["status"], "UNVERIFIED")
+            self.assertIn("contracts/__init__.py", report["ignored_python_files"])
+            self.assertFalse(report["tests_executed"])
+
 if __name__=="__main__": unittest.main()
