@@ -237,4 +237,35 @@ class OfflineVerificationTests(unittest.TestCase):
             self.assertFalse(report["tests_executed"])
             self.assertEqual(report["test_skip_reason"], "PREFLIGHT_INTEGRITY_FAILED")
 
+    def test_ignored_untracked_test_is_not_executed(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, target)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            name = "tests/test_rea_untrusted_injection.py"
+            (root / ".git/info/exclude").write_text(name + "\n")
+            sentinel = Path(d) / "ignored-code-executed.txt"
+            (root / name).write_text(
+                "import unittest\n"
+                "from pathlib import Path\n"
+                "class Untrusted(unittest.TestCase):\n"
+                "    def test_injection(self): Path(" + repr(str(sentinel)) + ").write_text('executed')\n",
+                encoding="utf-8")
+            status = subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                                    check=True, capture_output=True, text=True)
+            self.assertEqual(status.stdout.strip(), "")
+            report = audit(root, Path(d) / "ignored-receipt.json")
+            self.assertFalse(sentinel.exists(), "Ignored test must not execute")
+            self.assertEqual(report["status"], "UNVERIFIED")
+            self.assertEqual(report["test_skip_reason"], "PREFLIGHT_INTEGRITY_FAILED")
+            self.assertIn(name, report["untracked_discovered_tests"])
+
 if __name__=="__main__": unittest.main()
