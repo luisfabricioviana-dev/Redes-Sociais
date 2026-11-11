@@ -38,10 +38,21 @@ def audit(root: Path, out: Path) -> dict:
             missing.append(rel)
         else:
             files[rel] = hashlib.sha256(target.read_bytes()).hexdigest()
+    # Compare each required checkout file with the blob stored in HEAD.
+    # git status alone is not sufficient: assume-unchanged/skip-worktree
+    # can conceal content drift while still reporting a clean repository.
+    commit_content_mismatches = []
+    if head and len(head) == 40:
+        for rel in files:
+            expected = _run(["git", "rev-parse", f"HEAD:{rel}"], root)
+            actual = _run(["git", "hash-object", f"--path={rel}", rel], root)
+            if (expected.returncode != 0 or actual.returncode != 0
+                    or expected.stdout.strip() != actual.stdout.strip()):
+                commit_content_mismatches.append(rel)
     run = None if missing else _run(
         [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_rea_*py", "-v"], root)
     tests_pass = run is not None and run.returncode == 0
-    verified = bool(head and len(head) == 40 and clean and not missing and tests_pass)
+    verified = bool(head and len(head) == 40 and clean and not missing and not commit_content_mismatches and tests_pass)
     report = {
         "contract": "REA_SOCIAL_OFFLINE_VERIFICATION_v1",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -49,6 +60,7 @@ def audit(root: Path, out: Path) -> dict:
         "git_clean": clean,
         "git_status_exit_code": status.returncode,
         "missing_files": missing,
+        "commit_content_mismatches": commit_content_mismatches,
         "input_sha256": files,
         "python": sys.version.split()[0],
         "test_command": "python -m unittest discover -s tests -p 'test_rea_*py' -v",
