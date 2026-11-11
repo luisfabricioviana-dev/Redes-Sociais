@@ -46,7 +46,7 @@ def audit(root: Path, out: Path) -> dict:
     tracked_result = subprocess.run(["git", "ls-files", "-z"], cwd=root,
                                     capture_output=True, check=False)
     tracked = ([entry.decode("utf-8", "surrogateescape")
-                for entry in tracked_result.stdout.split(b"\\0") if entry]
+                for entry in tracked_result.stdout.split(b"\0") if entry]
                if tracked_result.returncode == 0 else [])
     commit_content_mismatches = []
     if head and len(head) == 40:
