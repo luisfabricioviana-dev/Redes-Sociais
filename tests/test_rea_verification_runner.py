@@ -1,0 +1,304 @@
+"""Safety checks for offline audit receipt generation."""
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import unittest
+from scripts.verify_rea_editorial_bridge import audit, REQUIRED
+
+class OfflineVerificationTests(unittest.TestCase):
+    def test_non_git_directory_never_verified(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            report=audit(root, Path(d + "-receipt.json"))
+            self.assertEqual(report["status"],"UNVERIFIED")
+            self.assertFalse(report["promotion_authorized"])
+            self.assertIsNone(report["git_head"])
+            self.assertTrue(report["missing_files"])
+    def test_receipt_has_machine_readable_fail_closed_metadata(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            report=audit(root, Path(d + "-audit.json"))
+            stored=json.loads(Path(d + "-audit.json").read_text())
+            self.assertEqual(stored["status"],"UNVERIFIED")
+            self.assertFalse(stored["ci_validated"])
+            self.assertFalse(stored["publication_authorized"])
+            self.assertEqual(report["status"],stored["status"])
+    def test_receipt_inside_repo_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            with self.assertRaises(ValueError):
+                audit(root,root/"receipt.json")
+    def test_clean_committed_tree_verified(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"repo";root.mkdir()
+            origin=Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                dst=root/rel;dst.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(origin/rel,dst)
+            subprocess.run(["git","init","-q"],cwd=root,check=True)
+            subprocess.run(["git","-c","user.name=Fixture","-c","user.email=fixture@example.invalid",
+                            "add","."],cwd=root,check=True)
+            subprocess.run(["git","-c","user.name=Fixture","-c","user.email=fixture@example.invalid",
+                            "commit","-qm","fixture"],cwd=root,check=True)
+            result=audit(root,Path(d)/"receipt.json")
+            self.assertEqual(result["status"],"LOCAL_COMMIT_TESTED")
+            self.assertFalse(result["promotion_authorized"])
+            (root/"dirty.txt").write_text("dirty")
+            result=audit(root,Path(d)/"dirty-receipt.json")
+            self.assertEqual(result["status"],"UNVERIFIED")
+
+    def test_assume_unchanged_required_file_tampering_is_blocked(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"repo";root.mkdir()
+            origin=Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                dst=root/rel;dst.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(origin/rel,dst)
+            subprocess.run(["git","init","-q"],cwd=root,check=True)
+            subprocess.run(["git","add","."],cwd=root,check=True)
+            subprocess.run(["git","-c","user.name=Fixture",
+                            "-c","user.email=fixture@example.invalid",
+                            "commit","-qm","fixture"],cwd=root,check=True)
+            rel=REQUIRED[0]
+            subprocess.run(["git","update-index","--assume-unchanged",rel],
+                           cwd=root,check=True)
+            (root/rel).write_text("# altered after commit\n",encoding="utf-8")
+            status=subprocess.run(["git","status","--porcelain"],cwd=root,
+                                  check=True,capture_output=True,text=True)
+            self.assertEqual(status.stdout.strip(),"")
+            result=audit(root,Path(d)/"tampered-receipt.json")
+            self.assertEqual(result["status"],"UNVERIFIED")
+            self.assertIn(rel,result["commit_content_mismatches"])
+
+    def test_running_tests_that_mutate_checkout_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"repo";root.mkdir()
+            origin=Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                dst=root/rel;dst.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(origin/rel,dst)
+            mutator=root/"tests/test_rea_mutates_checkout.py"
+            mutator.write_text(
+                "import unittest\n"
+                "from pathlib import Path\n"
+                "class MutatesCheckout(unittest.TestCase):\n"
+                "    def test_mutate(self):\n"
+                "        Path('contracts/rea_learning_gate.py').write_text('# changed by test\\\n')\n",
+                encoding="utf-8")
+            subprocess.run(["git","init","-q"],cwd=root,check=True)
+            subprocess.run(["git","add","."],cwd=root,check=True)
+            subprocess.run(["git","-c","user.name=Fixture",
+                            "-c","user.email=fixture@example.invalid",
+                            "commit","-qm","fixture"],cwd=root,check=True)
+            result=audit(root,Path(d)/"mutated-receipt.json")
+            self.assertEqual(result["test_exit_code"],0)
+            self.assertEqual(result["status"],"UNVERIFIED")
+            self.assertFalse(result["git_clean_after_tests"])
+
+    def test_running_tests_with_hidden_mutation_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)/"repo";root.mkdir()
+            origin=Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                dst=root/rel;dst.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(origin/rel,dst)
+            mutator=root/"tests/test_rea_hidden_mutation.py"
+            mutator.write_text(
+                "import unittest,subprocess\n"
+                "from pathlib import Path\n"
+                "class HiddenMutator(unittest.TestCase):\n"
+                "    def test_mutate(self):\n"
+                "        subprocess.run(['git','update-index','--assume-unchanged','contracts/rea_learning_gate.py'],check=True)\n"
+                "        Path('contracts/rea_learning_gate.py').write_text('# concealed edit\\\n')\n",
+                encoding="utf-8")
+            subprocess.run(["git","init","-q"],cwd=root,check=True)
+            subprocess.run(["git","add","."],cwd=root,check=True)
+            subprocess.run(["git","-c","user.name=Fixture",
+                            "-c","user.email=fixture@example.invalid",
+                            "commit","-qm","fixture"],cwd=root,check=True)
+            result=audit(root,Path(d)/"hidden-mutation-receipt.json")
+            self.assertEqual(result["test_exit_code"],0)
+            self.assertTrue(result["git_clean_after_tests"])
+            self.assertEqual(result["status"],"UNVERIFIED")
+            self.assertIn(REQUIRED[0],result["commit_content_mismatches"])
+
+    def test_hidden_change_in_non_required_tracked_file_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, target)
+            (root / "README.md").write_text("original evidence policy\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            subprocess.run(["git", "update-index", "--assume-unchanged", "README.md"],
+                           cwd=root, check=True)
+            (root / "README.md").write_text("tampered evidence policy\n", encoding="utf-8")
+            status = subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                                    check=True, capture_output=True, text=True)
+            self.assertEqual(status.stdout.strip(), "")
+            result = audit(root, Path(d) / "hidden-doc-receipt.json")
+            self.assertEqual(result["status"], "UNVERIFIED")
+            self.assertIn("README.md", result["commit_content_mismatches"])
+
+    def test_hidden_change_in_non_required_file_during_tests_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, target)
+            (root / "README.md").write_text("safe evidence\n", encoding="utf-8")
+            mutator = root / "tests/test_rea_mutate_docs.py"
+            mutator.write_text(
+                "import unittest,subprocess\n"
+                "from pathlib import Path\n"
+                "class HiddenDocMutator(unittest.TestCase):\n"
+                "    def test_mutate_doc(self):\n"
+                "        subprocess.run(['git','update-index','--assume-unchanged','README.md'],check=True)\n"
+                "        Path('README.md').write_text('changed evidence\\n')\n",
+                encoding="utf-8")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            report = audit(root, Path(d) / "hidden-doc-posttest.json")
+            self.assertEqual(report["test_exit_code"], 0)
+            self.assertTrue(report["git_clean_after_tests"])
+            self.assertEqual(report["status"], "UNVERIFIED")
+            self.assertIn("README.md", report["commit_content_mismatches"])
+
+    def test_hidden_external_symlink_is_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, target)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            rel = REQUIRED[0]
+            subprocess.run(["git", "update-index", "--assume-unchanged", rel],
+                           cwd=root, check=True)
+            original = root / rel
+            outside = Path(d) / "external-equal-content.py"
+            outside.write_bytes(original.read_bytes())
+            original.unlink()
+            try:
+                original.symlink_to(outside)
+            except (OSError, NotImplementedError):
+                self.skipTest("Symlink creation requires OS privilege")
+            status = subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                                    check=True, capture_output=True, text=True)
+            self.assertEqual(status.stdout.strip(), "")
+            result = audit(root, Path(d) / "symlink-receipt.json")
+            self.assertEqual(result["status"], "UNVERIFIED")
+            self.assertIn(rel, result["commit_content_mismatches"])
+            self.assertNotIn(rel, result["input_sha256"])
+            self.assertFalse(result["publication_authorized"])
+
+    def test_tampered_checkout_never_executes_untrusted_tests(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, target)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            sentinel = Path(d) / "executed.txt"
+            (root / "tests/test_rea_editorial_bridge.py").write_text(
+                "import unittest\n"
+                "from pathlib import Path\n"
+                "class UntrustedTest(unittest.TestCase):\n"
+                "    def test_run(self): Path(" + repr(str(sentinel)) + ").write_text('executed')\n",
+                encoding="utf-8")
+            report = audit(root, Path(d) / "preflight-receipt.json")
+            self.assertEqual(report["status"], "UNVERIFIED")
+            self.assertFalse(sentinel.exists())
+            self.assertIsNone(report["test_exit_code"])
+            self.assertFalse(report["tests_executed"])
+            self.assertEqual(report["test_skip_reason"], "PREFLIGHT_INTEGRITY_FAILED")
+
+    def test_ignored_untracked_test_is_not_executed(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, target)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            name = "tests/test_rea_untrusted_injection.py"
+            (root / ".git/info/exclude").write_text(name + "\n")
+            sentinel = Path(d) / "ignored-code-executed.txt"
+            (root / name).write_text(
+                "import unittest\n"
+                "from pathlib import Path\n"
+                "class Untrusted(unittest.TestCase):\n"
+                "    def test_injection(self): Path(" + repr(str(sentinel)) + ").write_text('executed')\n",
+                encoding="utf-8")
+            status = subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                                    check=True, capture_output=True, text=True)
+            self.assertEqual(status.stdout.strip(), "")
+            report = audit(root, Path(d) / "ignored-receipt.json")
+            self.assertFalse(sentinel.exists(), "Ignored test must not execute")
+            self.assertEqual(report["status"], "UNVERIFIED")
+            self.assertEqual(report["test_skip_reason"], "PREFLIGHT_INTEGRITY_FAILED")
+            self.assertIn(name, report["untracked_discovered_tests"])
+
+    def test_ignored_package_initializer_never_executes(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                dest = root / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, dest)
+            original = root / "tests/test_rea_editorial_bridge.py"
+            original.write_text(
+                "import unittest\nimport contracts.rea_learning_gate\n"
+                "class ContractTest(unittest.TestCase):\n"
+                "    def test_ok(self): pass\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            (root / ".git/info/exclude").write_text("contracts/__init__.py\n")
+            marker = Path(d) / "ignored-code-executed.txt"
+            (root / "contracts/__init__.py").write_text(
+                "from pathlib import Path\n"
+                "Path(" + repr(str(marker)) + ").write_text('executed')\n",
+                encoding="utf-8")
+            status = subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                                    check=True, capture_output=True, text=True)
+            self.assertEqual(status.stdout.strip(), "")
+            report = audit(root, Path(d) / "ignored-import-receipt.json")
+            self.assertFalse(marker.exists(), "Ignored module must not be imported")
+            self.assertEqual(report["status"], "UNVERIFIED")
+            self.assertIn("contracts/__init__.py", report["ignored_python_files"])
+            self.assertFalse(report["tests_executed"])
+
+if __name__=="__main__": unittest.main()
