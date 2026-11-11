@@ -21,6 +21,15 @@ REQUIRED = (
 def _run(args, root):
     return subprocess.run(args, cwd=root, text=True, capture_output=True, check=False)
 
+def _has_symlink_component(root: Path, relative: str) -> bool:
+    """Reject external or internal link indirection concealed by Git index flags."""
+    current = root
+    for component in Path(relative).parts:
+        current = current / component
+        if current.is_symlink():
+            return True
+    return False
+
 def audit(root: Path, out: Path) -> dict:
     root = root.resolve()
     out = out.resolve()
@@ -51,6 +60,10 @@ def audit(root: Path, out: Path) -> dict:
     commit_content_mismatches = []
     if head and len(head) == 40:
         for rel in tracked:
+            if _has_symlink_component(root, rel):
+                if rel not in commit_content_mismatches:
+                    commit_content_mismatches.append(rel)
+                continue
             expected = _run(["git", "rev-parse", f"HEAD:{rel}"], root)
             actual = _run(["git", "hash-object", f"--path={rel}", rel], root)
             if (expected.returncode != 0 or actual.returncode != 0
@@ -64,6 +77,10 @@ def audit(root: Path, out: Path) -> dict:
     clean_after_tests = post_status.returncode == 0 and not post_status.stdout.strip()
     if head and len(head) == 40:
         for rel in tracked:
+            if _has_symlink_component(root, rel):
+                if rel not in commit_content_mismatches:
+                    commit_content_mismatches.append(rel)
+                continue
             expected = _run(["git", "rev-parse", f"HEAD:{rel}"], root)
             actual = _run(["git", "hash-object", f"--path={rel}", rel], root)
             if (expected.returncode != 0 or actual.returncode != 0
