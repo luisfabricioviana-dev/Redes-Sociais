@@ -19,3 +19,17 @@ is `CANDIDATE_FOR_REVIEW`; no canon promotion, runtime action or publication.
   run regressions before any reviewed promotion, subject to code review.
 
 Local test: `python -m unittest discover -s tests -p 'test_rea_*py' -v`.
+
+## Independent review gate (v1.1)
+
+`contracts/rea_independent_review.py` adds a second, separate review-evidence
+gate: the independent reviewer must differ from the originating reviewer, the
+candidate digest and regression/source identifiers must match the admission
+ticket, and regression status must be `PASS`. Missing witness digest or
+location, cross-profile data and action authorization are rejected.
+
+The positive state `REVIEW_EVIDENCE_COMPLETE` is **not** a promotion or a
+publication grant: externally supplied reviewer IDs, witness hashes and status
+claims must still be independently authenticated. No capability may be
+automatically promoted or deployed by this code. The executable review
+tests reside at `tests/test_rea_independent_review.py`.
