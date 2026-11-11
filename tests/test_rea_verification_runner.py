@@ -124,4 +124,28 @@ class OfflineVerificationTests(unittest.TestCase):
             self.assertEqual(result["status"],"UNVERIFIED")
             self.assertIn(REQUIRED[0],result["commit_content_mismatches"])
 
+    def test_hidden_change_in_non_required_tracked_file_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, target)
+            (root / "README.md").write_text("original evidence policy\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            subprocess.run(["git", "update-index", "--assume-unchanged", "README.md"],
+                           cwd=root, check=True)
+            (root / "README.md").write_text("tampered evidence policy\n", encoding="utf-8")
+            status = subprocess.run(["git", "status", "--porcelain"], cwd=root,
+                                    check=True, capture_output=True, text=True)
+            self.assertEqual(status.stdout.strip(), "")
+            result = audit(root, Path(d) / "hidden-doc-receipt.json")
+            self.assertEqual(result["status"], "UNVERIFIED")
+            self.assertIn("README.md", result["commit_content_mismatches"])
+
 if __name__=="__main__": unittest.main()
