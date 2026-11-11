@@ -72,3 +72,39 @@ Actions jobs reporting failure with null steps cannot establish the precise
 failure cause. Check repository Actions billing, runner availability, policies
 and permissions before retrying; do not replace mandatory CI with a green
 local-only receipt.
+
+## 2026-11-11 — exact-commit receipt hardening (candidate only)
+
+Reassessment exposed two false-positive patterns in the original offline verifier:
+a required file may differ from the HEAD blob while `git status` reports
+clean (`assume-unchanged`), and tests may mutate the checkout after the
+initial cleanliness check. The verifier now compares required files to their
+recorded Git blob IDs **before and after** the test run, records
+`commit_content_mismatches`, disables Python bytecode writes with `-B`,
+and records `git_clean_after_tests`.
+
+**Scoped red/green reproduction:** an isolated local harness reproduced the
+false-positive, then passed 4/4 scenarios after the hardening. This harness
+was a reduced copy of the verifier and synthetic fixtures, **not** a fresh
+clone nor a full run of the GitHub PR test suite. Regression tests for
+hidden pre-test modification and normal/hidden in-test mutation are also
+committed to `tests/test_rea_verification_runner.py`.
+
+**Committed candidate implementation:** verifier commit
+`a210ec2397558532f5e302e7a493887619eac573` (with preceding regression
+test commits in draft PR #4). Read the current PR head before using this SHA;
+subsequent documentation-only commits may change it.
+
+**Remote CI:** [run 43002340934](https://github.com/luisfabricioviana-dev/Redes-Sociais/actions/runs/43002340934)
+finished `failure`. Its job `contract-regression` reported no steps and
+the log download returned `404 BlobNotFound`. There is no positive
+evidence that Python tests ran on GitHub, nor enough evidence to identify
+billing as the specific cause. Check Actions annotations/account billing/
+runner policy and reproduce from a clean exact-commit checkout.
+
+**Result:** `LOCAL_ISOLATED_REPRO=PASS`;
+`REMOTE_CI=UNVERIFIED/FAILURE`;
+`INDEPENDENT_REVIEW=NOT_VERIFIED`;
+`MERGE=NOT_AUTHORIZED`;
+`PRODUCTION=NOT_DONE`;
+`PUBLICATION=BLOCKED`.
