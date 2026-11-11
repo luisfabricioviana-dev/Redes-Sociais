@@ -41,9 +41,16 @@ def audit(root: Path, out: Path) -> dict:
     # Compare each required checkout file with the blob stored in HEAD.
     # git status alone is not sufficient: assume-unchanged/skip-worktree
     # can conceal content drift while still reporting a clean repository.
+    # Bind the receipt to the entire tracked checkout. Checking only REQUIRED
+    # leaves an integrity gap for CI, documentation and other committed files.
+    tracked_result = subprocess.run(["git", "ls-files", "-z"], cwd=root,
+                                    capture_output=True, check=False)
+    tracked = ([entry.decode("utf-8", "surrogateescape")
+                for entry in tracked_result.stdout.split(b"\\0") if entry]
+               if tracked_result.returncode == 0 else [])
     commit_content_mismatches = []
     if head and len(head) == 40:
-        for rel in files:
+        for rel in tracked:
             expected = _run(["git", "rev-parse", f"HEAD:{rel}"], root)
             actual = _run(["git", "hash-object", f"--path={rel}", rel], root)
             if (expected.returncode != 0 or actual.returncode != 0
@@ -56,7 +63,7 @@ def audit(root: Path, out: Path) -> dict:
     post_status = _run(["git", "status", "--porcelain", "--untracked-files=normal"], root)
     clean_after_tests = post_status.returncode == 0 and not post_status.stdout.strip()
     if head and len(head) == 40:
-        for rel in files:
+        for rel in tracked:
             expected = _run(["git", "rev-parse", f"HEAD:{rel}"], root)
             actual = _run(["git", "hash-object", f"--path={rel}", rel], root)
             if (expected.returncode != 0 or actual.returncode != 0
@@ -64,7 +71,7 @@ def audit(root: Path, out: Path) -> dict:
                 if rel not in commit_content_mismatches:
                     commit_content_mismatches.append(rel)
     tests_pass = run is not None and run.returncode == 0
-    verified = bool(head and len(head) == 40 and clean and clean_after_tests and not missing and not commit_content_mismatches and tests_pass)
+    verified = bool(head and len(head) == 40 and clean and clean_after_tests and not missing and tracked_result.returncode == 0 and bool(tracked) and not commit_content_mismatches and tests_pass)
     report = {
         "contract": "REA_SOCIAL_OFFLINE_VERIFICATION_v1",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -73,6 +80,8 @@ def audit(root: Path, out: Path) -> dict:
         "git_clean_after_tests": clean_after_tests,
         "git_status_exit_code": status.returncode,
         "missing_files": missing,
+        "tracked_file_count": len(tracked),
+        "tracked_listing_exit_code": tracked_result.returncode,
         "commit_content_mismatches": commit_content_mismatches,
         "input_sha256": files,
         "python": sys.version.split()[0],
