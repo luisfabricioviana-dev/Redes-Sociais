@@ -148,4 +148,33 @@ class OfflineVerificationTests(unittest.TestCase):
             self.assertEqual(result["status"], "UNVERIFIED")
             self.assertIn("README.md", result["commit_content_mismatches"])
 
+    def test_hidden_change_in_non_required_file_during_tests_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "repo"; root.mkdir()
+            origin = Path(__file__).resolve().parents[1]
+            for rel in REQUIRED:
+                target = root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(origin / rel, target)
+            (root / "README.md").write_text("safe evidence\n", encoding="utf-8")
+            mutator = root / "tests/test_rea_mutate_docs.py"
+            mutator.write_text(
+                "import unittest,subprocess\n"
+                "from pathlib import Path\n"
+                "class HiddenDocMutator(unittest.TestCase):\n"
+                "    def test_mutate_doc(self):\n"
+                "        subprocess.run(['git','update-index','--assume-unchanged','README.md'],check=True)\n"
+                "        Path('README.md').write_text('changed evidence\\n')\n",
+                encoding="utf-8")
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "add", "."], cwd=root, check=True)
+            subprocess.run(["git", "-c", "user.name=Fixture",
+                            "-c", "user.email=fixture@example.invalid",
+                            "commit", "-qm", "fixture"], cwd=root, check=True)
+            report = audit(root, Path(d) / "hidden-doc-posttest.json")
+            self.assertEqual(report["test_exit_code"], 0)
+            self.assertTrue(report["git_clean_after_tests"])
+            self.assertEqual(report["status"], "UNVERIFIED")
+            self.assertIn("README.md", report["commit_content_mismatches"])
+
 if __name__=="__main__": unittest.main()
