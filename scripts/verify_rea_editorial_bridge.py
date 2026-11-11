@@ -50,20 +50,33 @@ def audit(root: Path, out: Path) -> dict:
                     or expected.stdout.strip() != actual.stdout.strip()):
                 commit_content_mismatches.append(rel)
     run = None if missing else _run(
-        [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_rea_*py", "-v"], root)
+        [sys.executable, "-B", "-m", "unittest", "discover", "-s", "tests", "-p", "test_rea_*py", "-v"], root)
+    # Validate again after tests. A passing suite is not sufficient if
+    # executing it mutates the exact input tree being certified.
+    post_status = _run(["git", "status", "--porcelain", "--untracked-files=normal"], root)
+    clean_after_tests = post_status.returncode == 0 and not post_status.stdout.strip()
+    if head and len(head) == 40:
+        for rel in files:
+            expected = _run(["git", "rev-parse", f"HEAD:{rel}"], root)
+            actual = _run(["git", "hash-object", f"--path={rel}", rel], root)
+            if (expected.returncode != 0 or actual.returncode != 0
+                    or expected.stdout.strip() != actual.stdout.strip()):
+                if rel not in commit_content_mismatches:
+                    commit_content_mismatches.append(rel)
     tests_pass = run is not None and run.returncode == 0
-    verified = bool(head and len(head) == 40 and clean and not missing and not commit_content_mismatches and tests_pass)
+    verified = bool(head and len(head) == 40 and clean and clean_after_tests and not missing and not commit_content_mismatches and tests_pass)
     report = {
         "contract": "REA_SOCIAL_OFFLINE_VERIFICATION_v1",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "git_head": head,
         "git_clean": clean,
+        "git_clean_after_tests": clean_after_tests,
         "git_status_exit_code": status.returncode,
         "missing_files": missing,
         "commit_content_mismatches": commit_content_mismatches,
         "input_sha256": files,
         "python": sys.version.split()[0],
-        "test_command": "python -m unittest discover -s tests -p 'test_rea_*py' -v",
+        "test_command": "python -B -m unittest discover -s tests -p 'test_rea_*py' -v",
         "test_exit_code": run.returncode if run is not None else None,
         "test_stdout": (run.stdout if run else "")[-12000:],
         "test_stderr": (run.stderr if run else "")[-12000:],
