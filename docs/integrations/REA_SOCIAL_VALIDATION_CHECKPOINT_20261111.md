@@ -43,3 +43,32 @@ credential or an explicitly authorized artifact transport is provided.
   authenticated reviewer identity, end-to-end audiovisual integration.
 
 Promotion and publication must stay BLOCKED pending independent validation.
+
+## Exact commit offline verification procedure
+
+The repository now includes `scripts/verify_rea_editorial_bridge.py`.
+From a **fresh clone** at the exact intended PR commit, run:
+
+```bash
+git status --porcelain
+python scripts/verify_rea_editorial_bridge.py --repo . --out ../rea-social-verification.json
+```
+
+The report binds the Git HEAD, clean working tree, individual input-file
+SHA-256 digests, Python version and full unittest result. The tool returns
+exit code 2 and status `UNVERIFIED` when any input is missing, repository
+identity is absent, checkout is dirty or tests fail. Writing the report
+inside the checkout is forbidden to avoid a misleading clean-tree claim.
+The receipt itself is **not CI attestation**, independent reviewer
+authentication, production QA or release authorization.
+
+The local implementation and test fixtures were independently executed
+as a 32-test suite (28 previous regressions + four verifier regressions),
+with zero failures, in a working directory containing the required source
+files but *without* Git metadata. Accordingly the standalone receipt reports
+`UNVERIFIED`, as intended. An exact-commit run is still necessary.
+
+Actions jobs reporting failure with null steps cannot establish the precise
+failure cause. Check repository Actions billing, runner availability, policies
+and permissions before retrying; do not replace mandatory CI with a green
+local-only receipt.
