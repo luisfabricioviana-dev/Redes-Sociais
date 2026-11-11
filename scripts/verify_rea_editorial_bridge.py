@@ -65,6 +65,15 @@ def audit(root: Path, out: Path) -> dict:
     tracked_set = set(tracked)
     untracked_discovered_tests = sorted(path for path in discovered_tests
                                         if path not in tracked_set)
+    # Ignored importable Python files can execute through committed tests
+    # while Git reports a clean checkout. Fail closed before starting unittest.
+    ignored_result = subprocess.run(
+        ["git", "ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
+        cwd=root, capture_output=True, check=False)
+    ignored_python_files = sorted(
+        path.decode("utf-8", "surrogateescape")
+        for path in ignored_result.stdout.split(b"\0")
+        if path and path.lower().endswith((b".py", b".pyc", b".pyd", b".so", b".pth")))
     commit_content_mismatches = []
     if head and len(head) == 40:
         for rel in tracked:
@@ -81,7 +90,8 @@ def audit(root: Path, out: Path) -> dict:
     # A post-run UNVERIFIED receipt cannot undo execution of modified code.
     preflight_ok = bool(head and len(head) == 40 and clean and not missing
                         and tracked_result.returncode == 0 and bool(tracked)
-                        and not commit_content_mismatches and not untracked_discovered_tests)
+                        and not commit_content_mismatches and not untracked_discovered_tests
+                        and ignored_result.returncode == 0 and not ignored_python_files)
     run = (_run([sys.executable, "-B", "-m", "unittest", "discover", "-s",
                  "tests", "-p", "test_rea_*py", "-v"], root)
            if preflight_ok else None)
@@ -102,7 +112,7 @@ def audit(root: Path, out: Path) -> dict:
                 if rel not in commit_content_mismatches:
                     commit_content_mismatches.append(rel)
     tests_pass = run is not None and run.returncode == 0
-    verified = bool(head and len(head) == 40 and clean and clean_after_tests and not missing and tracked_result.returncode == 0 and bool(tracked) and not commit_content_mismatches and not untracked_discovered_tests and tests_pass)
+    verified = bool(head and len(head) == 40 and clean and clean_after_tests and not missing and tracked_result.returncode == 0 and bool(tracked) and not commit_content_mismatches and not untracked_discovered_tests and ignored_result.returncode == 0 and not ignored_python_files and tests_pass)
     report = {
         "contract": "REA_SOCIAL_OFFLINE_VERIFICATION_v1",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -112,6 +122,7 @@ def audit(root: Path, out: Path) -> dict:
         "git_status_exit_code": status.returncode,
         "missing_files": missing,
         "untracked_discovered_tests": untracked_discovered_tests,
+        "ignored_python_files": ignored_python_files,
         "tracked_file_count": len(tracked),
         "tracked_listing_exit_code": tracked_result.returncode,
         "commit_content_mismatches": commit_content_mismatches,
