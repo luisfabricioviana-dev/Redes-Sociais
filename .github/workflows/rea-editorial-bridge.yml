@@ -24,5 +24,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run REA and Social admission regressions
-        run: python -m unittest discover -s tests -p 'test_rea_*py' -v
+      - name: Verify the checked-out commit before executing test code
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python -B scripts/verify_rea_editorial_bridge.py \
+            --repo . --out "$RUNNER_TEMP/rea-editorial-verification.json"
+      - name: Preserve exact-commit local receipt for independent review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rea-editorial-verification
+          path: ${{ runner.temp }}/rea-editorial-verification.json
+          if-no-files-found: warn
+          retention-days: 14
