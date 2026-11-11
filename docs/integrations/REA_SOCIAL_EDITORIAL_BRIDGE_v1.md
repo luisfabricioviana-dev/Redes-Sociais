@@ -33,3 +33,21 @@ publication grant: externally supplied reviewer IDs, witness hashes and status
 claims must still be independently authenticated. No capability may be
 automatically promoted or deployed by this code. The executable review
 tests reside at `tests/test_rea_independent_review.py`.
+
+## Byte-bound witness audit v1.2 (2026-11-11)
+
+The separate `rea_review_artifacts.verify_review_artifacts` function accepts real
+witness bytes and regression-report bytes. It validates SHA-256 of both payloads,
+and the parsed regression record must match the candidate hash, regression ID,
+independent reviewer ID, witness digest, domain SOCIAL, and status PASS. The
+record must explicitly deny automatic promotion. Missing/altered bytes fail closed.
+
+This is **structural evidence integrity**, not proof that the evidence is true,
+scientifically adequate or authored by the identified reviewer. Hashes of
+untrusted submissions alone cannot establish authenticity. Publication and
+promotion are always disabled by this contract.
+
+New regression fixtures: `tests/test_rea_review_artifacts.py`. A standalone
+9-test local mirror of the new byte-binding logic passed on 2026-11-11; this
+does not certify the entire GitHub checkout. Remote Actions remains blocked
+before step-level logs, and no production integration was performed.
